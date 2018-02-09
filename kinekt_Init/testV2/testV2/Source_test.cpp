@@ -1,25 +1,18 @@
-#include <windows.h>
-#include <Shlobj.h>
-#include <d2d1.h>
-#include <Kinect.h>
-#include <iostream>
 
+//------------------------------------------------------------------------------
+// <copyright file="BodyBasics.cpp" company="Microsoft">
+//     Copyright (c) Microsoft Corporation.  All rights reserved.
+// </copyright>
+//------------------------------------------------------------------------------
+#include <strsafe.h>
+#include "BodyBasics.h"
+#include <iostream>
 using namespace std;
 
-IBodyFrameReader*       m_pBodyFrameReader;
-IKinectSensor*          m_pKinectSensor;
-ICoordinateMapper*      m_pCoordinateMapper;
-HWND                    m_hWnd;
-ID2D1HwndRenderTarget*  m_pRenderTarget;
-
-static const int        cDepthWidth = 512;
-static const int        cDepthHeight = 424;
-
-void                    Update();
-
-HRESULT                 InitializeDefaultSensor();
-void                    ProcessBody(INT64 nTime, int nBodyCount, IBody** ppBodies);
-D2D1_POINT_2F           BodyToScreen(const CameraSpacePoint& bodyPoint, int width, int height);
+static const float c_JointThickness = 3.0f;
+static const float c_TrackedBoneThickness = 6.0f;
+static const float c_InferredBoneThickness = 1.0f;
+static const float c_HandSize = 30.0f;
 
 
 template<class Interface>
@@ -32,23 +25,78 @@ inline void SafeRelease(Interface *& pInterfaceToRelease)
 	}
 }
 
+int main()
+{
+
+	CBodyBasics application;
+	application.Run();
+}
+
+/// <summary>
+/// Constructor
+/// </summary>
+CBodyBasics::CBodyBasics() :
+	m_hWnd(NULL),
+	m_nStartTime(0),
+	m_nLastCounter(0),
+	m_nFramesSinceUpdate(0),
+	m_fFreq(0),
+	m_nNextStatusTime(0LL),
+	m_pKinectSensor(NULL),
+	m_pCoordinateMapper(NULL),
+	m_pBodyFrameReader(NULL)
+{
+	LARGE_INTEGER qpf = { 0 };
+	if (QueryPerformanceFrequency(&qpf))
+	{
+		m_fFreq = double(qpf.QuadPart);
+	}
+}
 
 
-void Update()
+/// <summary>
+/// Destructor
+/// </summary>
+CBodyBasics::~CBodyBasics()
+{
+
+	// done with body frame reader
+	SafeRelease(m_pBodyFrameReader);
+
+	// done with coordinate mapper
+	SafeRelease(m_pCoordinateMapper);
+
+	// close the Kinect Sensor
+	if (m_pKinectSensor)
+	{
+		m_pKinectSensor->Close();
+	}
+
+	SafeRelease(m_pKinectSensor);
+}
+
+int CBodyBasics::Run()
+{
+	InitializeDefaultSensor();
+	while (true)
+	{
+		Update();
+	}
+}
+
+
+void CBodyBasics::Update()
 {
 	if (!m_pBodyFrameReader)
 	{
 		return;
 	}
-
 	IBodyFrame* pBodyFrame = NULL;
 
 	HRESULT hr = m_pBodyFrameReader->AcquireLatestFrame(&pBodyFrame);
-	cout << SUCCEEDED(hr);
 
 	if (SUCCEEDED(hr))
 	{
-		cout << "a";
 		INT64 nTime = 0;
 
 		hr = pBodyFrame->get_RelativeTime(&nTime);
@@ -69,13 +117,13 @@ void Update()
 		{
 			SafeRelease(ppBodies[i]);
 		}
+	}
 
 	SafeRelease(pBodyFrame);
-
-	}
 }
 
-HRESULT InitializeDefaultSensor()
+
+HRESULT CBodyBasics::InitializeDefaultSensor()
 {
 	HRESULT hr;
 
@@ -83,6 +131,7 @@ HRESULT InitializeDefaultSensor()
 	if (FAILED(hr))
 	{
 		return hr;
+		
 	}
 
 	if (m_pKinectSensor)
@@ -101,44 +150,32 @@ HRESULT InitializeDefaultSensor()
 		{
 			hr = m_pKinectSensor->get_BodyFrameSource(&pBodyFrameSource);
 		}
-		
+
 		if (SUCCEEDED(hr))
 		{
 			hr = pBodyFrameSource->OpenReader(&m_pBodyFrameReader);
 		}
-		
-		SafeRelease(pBodyFrameSource);
 
-		if (!m_pKinectSensor || FAILED(hr))
-		{
-			int a;
-			cout << "No ready Kinect found!";
-			cin >> a;
-			return E_FAIL;
-		}
-		
+		SafeRelease(pBodyFrameSource);
 	}
+
+	if (!m_pKinectSensor || FAILED(hr))
+	{
+		cout << "No ready Kinect found!";
+		return E_FAIL;
+	}
+
 	return hr;
 }
 
-void ProcessBody(INT64 nTime, int nBodyCount, IBody** ppBodies)
+void CBodyBasics::ProcessBody(INT64 nTime, int nBodyCount, IBody** ppBodies)
 {
-	if (m_hWnd)
-	{
-		HRESULT hr = S_OK;
-		if (SUCCEEDED(hr) && m_pRenderTarget && m_pCoordinateMapper)
-		{
-			m_pRenderTarget->BeginDraw();
-			m_pRenderTarget->Clear();
-			/*
-			RECT rct;
-			GetClientRect(GetDlgItem(m_hWnd, IDC_VIDEOVIEW), &rct);
-			int width = rct.right;
-			int height = rct.bottom;
-			*/
-			int width = 640;
-			int height = 480;
+		HRESULT hr;
 
+		if (m_pCoordinateMapper)
+		{
+			int width = 640;
+			int height = 280;
 
 			for (int i = 0; i < nBodyCount; ++i)
 			{
@@ -148,15 +185,12 @@ void ProcessBody(INT64 nTime, int nBodyCount, IBody** ppBodies)
 					BOOLEAN bTracked = false;
 					hr = pBody->get_IsTracked(&bTracked);
 
-					if (SUCCEEDED(hr) && bTracked)
+					if (bTracked)
 					{
 						Joint joints[JointType_Count];
 						D2D1_POINT_2F jointPoints[JointType_Count];
-						HandState leftHandState = HandState_Unknown;
-						HandState rightHandState = HandState_Unknown;
-
-						pBody->get_HandLeftState(&leftHandState);
-						pBody->get_HandRightState(&rightHandState);
+						//HandState leftHandState = HandState_Unknown;
+						//HandState rightHandState = HandState_Unknown;
 
 						hr = pBody->GetJoints(_countof(joints), joints);
 						if (SUCCEEDED(hr))
@@ -164,25 +198,18 @@ void ProcessBody(INT64 nTime, int nBodyCount, IBody** ppBodies)
 							for (int j = 0; j < _countof(joints); ++j)
 							{
 								jointPoints[j] = BodyToScreen(joints[j].Position, width, height);
+								//cout << joints[7].Position.X;
+								cout << jointPoints[7].x << "\n";
 							}
-							/*
-							DrawBody(joints, jointPoints);
-
-							DrawHand(leftHandState, jointPoints[JointType_HandLeft]);
-							DrawHand(rightHandState, jointPoints[JointType_HandRight]);
-							*/
-							cout << jointPoints[JointType_HandLeft].x;
 						}
 					}
 				}
-			}
-
-			hr = m_pRenderTarget->EndDraw();		
-		}
+			}	
 	}
 }
 
-D2D1_POINT_2F BodyToScreen(const CameraSpacePoint& bodyPoint, int width, int height)
+
+D2D1_POINT_2F CBodyBasics::BodyToScreen(const CameraSpacePoint& bodyPoint, int width, int height)
 {
 	// Calculate the body's position on the screen
 	DepthSpacePoint depthPoint = { 0 };
@@ -193,24 +220,3 @@ D2D1_POINT_2F BodyToScreen(const CameraSpacePoint& bodyPoint, int width, int hei
 
 	return D2D1::Point2F(screenPointX, screenPointY);
 }
-
-int main() {
-	
-	while (true) {
-		InitializeDefaultSensor();
-		Update();
-		SafeRelease(m_pBodyFrameReader);
-
-		// done with coordinate mapper
-		SafeRelease(m_pCoordinateMapper);
-
-		// close the Kinect Sensor
-		if (m_pKinectSensor)
-		{
-			m_pKinectSensor->Close();
-		}
-
-		SafeRelease(m_pKinectSensor);
-	}
-}
-

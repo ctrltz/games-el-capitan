@@ -55,7 +55,9 @@ public:
 	/// </summary>
 	/// <param name="hInstance"></param>
 	/// <param name="nCmdShow"></param>
-	int                     Run();
+	void                    Run();
+	D2D1_POINT_2F			SkeletPointsXY(int i);
+	float					DepthSkeletonPoints(int i);
 
 private:
 	HWND                    m_hWnd;
@@ -73,6 +75,8 @@ private:
 	IBodyFrameReader*       m_pBodyFrameReader;
 	ID2D1HwndRenderTarget*  m_pRenderTarget;
 
+	Joint trackPoints[JointType_Count];
+	D2D1_POINT_2F trackPointsXY[JointType_Count];
 
 	/// <summary>
 	/// Main processing function
@@ -144,4 +148,7 @@ private:
 	/// <param name="joint0">one joint of the bone to draw</param>
 	/// <param name="joint1">other joint of the bone to draw</param>
 	void                    DrawBone(const Joint* pJoints, const D2D1_POINT_2F* pJointPoints, JointType joint0, JointType joint1);
+
+
+	
 };

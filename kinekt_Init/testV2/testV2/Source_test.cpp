@@ -24,13 +24,12 @@ inline void SafeRelease(Interface *& pInterfaceToRelease)
 		pInterfaceToRelease = NULL;
 	}
 }
-
+/*
 int main()
 {
-
 	CBodyBasics application;
 	application.Run();
-}
+}*/
 
 /// <summary>
 /// Constructor
@@ -75,13 +74,9 @@ CBodyBasics::~CBodyBasics()
 	SafeRelease(m_pKinectSensor);
 }
 
-int CBodyBasics::Run()
+void CBodyBasics::Run()
 {
 	InitializeDefaultSensor();
-	while (true)
-	{
-		Update();
-	}
 }
 
 
@@ -193,13 +188,15 @@ void CBodyBasics::ProcessBody(INT64 nTime, int nBodyCount, IBody** ppBodies)
 						//HandState rightHandState = HandState_Unknown;
 
 						hr = pBody->GetJoints(_countof(joints), joints);
+						pBody->GetJoints(_countof(trackPoints), trackPoints);
 						if (SUCCEEDED(hr))
 						{
 							for (int j = 0; j < _countof(joints); ++j)
 							{
 								jointPoints[j] = BodyToScreen(joints[j].Position, width, height);
+								trackPointsXY[j] = jointPoints[j];
 								//cout << joints[7].Position.X;
-								cout << jointPoints[7].x << "\n";
+								//cout << jointPoints[7].x << "\n";
 							}
 						}
 					}
@@ -219,4 +216,18 @@ D2D1_POINT_2F CBodyBasics::BodyToScreen(const CameraSpacePoint& bodyPoint, int w
 	float screenPointY = static_cast<float>(depthPoint.Y * height) / cDepthHeight;
 
 	return D2D1::Point2F(screenPointX, screenPointY);
+}
+
+
+
+D2D1_POINT_2F CBodyBasics::SkeletPointsXY(int i)
+{
+	Update();
+	return trackPointsXY[i];
+}
+
+float CBodyBasics::DepthSkeletonPoints(int i)
+{
+	Update();
+	return trackPoints->Position.Z;
 }

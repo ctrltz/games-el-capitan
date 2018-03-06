@@ -1,0 +1,6 @@
+﻿  Game_SheetV2cpp.cpp
+  Game.cpp
+e:\kinekt\testv2\testv2\game.cpp(71): warning C4244: =: преобразование "sf::Int32" в "float", возможна потеря данных
+e:\kinekt\testv2\testv2\game.cpp(75): warning C4244: инициализация: преобразование "double" в "float", возможна потеря данных
+  Создание кода...
+  testV2.vcxproj -> E:\kinekt\testV2\Debug\testV2.exe
